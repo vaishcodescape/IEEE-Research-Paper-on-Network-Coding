@@ -3,7 +3,7 @@ Streamlit Interactive Demo
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 A Unified Cross-Layer Network Coding Architecture
 for Wireless Multicast Under Interference
-Group 19 — Dhirubhai Ambani University | IEEE Research Paper Simulation
+Group 19 — IEEE Research Paper Simulation
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Run with:  streamlit run app.py
 """
@@ -188,6 +188,115 @@ def apply_base(fig: go.Figure, height: int = 420) -> go.Figure:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Live-simulation helpers  (module-level for @st.cache_data compatibility)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _gf2_rank(coeff_list: list, k_val: int) -> int:
+    """GF(2) Gaussian elimination rank of a binary matrix."""
+    if not coeff_list:
+        return 0
+    m = np.array(coeff_list, dtype=np.uint8)
+    rank = 0
+    for col in range(k_val):
+        piv = next((r for r in range(rank, len(m)) if m[r, col]), None)
+        if piv is None:
+            continue
+        m[[rank, piv]] = m[[piv, rank]]
+        for r in range(len(m)):
+            if r != rank and m[r, col]:
+                m[r] ^= m[rank]
+        rank += 1
+        if rank == k_val:
+            break
+    return rank
+
+
+def _lv_step(n_steps: int, k_val: int, eps: float) -> None:
+    """Advance the live RLNC decoder simulation by n_steps transmissions."""
+    rng = st.session_state.lv_rng
+    buf = st.session_state.lv_buf
+    fl  = st.session_state.lv_flags
+    rt  = st.session_state.lv_rt_rx
+    rh  = st.session_state.lv_rank_hist
+    rth = st.session_state.lv_rt_hist
+    for _ in range(n_steps):
+        if st.session_state.lv_rlnc_done and st.session_state.lv_rt_done:
+            break
+        st.session_state.lv_n_tx += 1
+        t = st.session_state.lv_n_tx
+        erased = bool(rng.random() < eps)
+        fl.append(not erased)
+        if not erased:
+            c = rng.integers(0, 2, size=k_val, dtype=np.uint8)
+            if not c.any():
+                c[int(rng.integers(0, k_val))] = 1
+            buf.append(c.tolist())
+            rt.add((t - 1) % k_val)   # cycling routing: pkt t → source t%k
+        rank = _gf2_rank(buf, k_val)
+        rh.append(rank)
+        rth.append(len(rt))
+        if rank >= k_val and not st.session_state.lv_rlnc_done:
+            st.session_state.lv_rlnc_done = True
+            st.session_state.lv_rlnc_t   = t
+        if len(rt) >= k_val and not st.session_state.lv_rt_done:
+            st.session_state.lv_rt_done = True
+            st.session_state.lv_rt_t    = t
+
+
+@st.cache_data(show_spinner=False)
+def _cached_multicast(M: int, k_val: int, snr_dB: float, R_val: float,
+                      N_slots: int, seed: int):
+    """Broadcast M receivers with independent erasure channels: RLNC vs routing."""
+    rng = np.random.default_rng(seed)
+    eps = float(erasure_prob(np.array([10.0 ** (snr_dB / 10.0)]), R_val)[0])
+    coeffs = rng.integers(0, 2, size=(N_slots, k_val), dtype=np.uint8)
+    for i in range(N_slots):
+        if not coeffs[i].any():
+            coeffs[i, int(rng.integers(0, k_val))] = 1
+    rx = (rng.random((M, N_slots)) > eps).astype(np.uint8)
+    rlnc_t  = np.full(M, float(N_slots + 1))
+    route_t = np.full(M, float(N_slots + 1))
+    for m in range(M):
+        buf, distinct = [], set()
+        rlnc_ok = route_ok = False
+        for t in range(N_slots):
+            if rx[m, t]:
+                buf.append(coeffs[t].tolist())
+                distinct.add(t % k_val)
+                if not rlnc_ok and _gf2_rank(buf, k_val) >= k_val:
+                    rlnc_t[m] = float(t + 1)
+                    rlnc_ok   = True
+            if not route_ok and len(distinct) >= k_val:
+                route_t[m] = float(t + 1)
+                route_ok   = True
+    return rlnc_t, route_t, rx
+
+
+@st.cache_data(show_spinner=False)
+def _cached_fading(T: int, snr_mean_dB: float, snr_drift: float,
+                   k_val: int, R_val: float, n_fix_val: int,
+                   Ptarget_val: float, seed: int):
+    """Random-walk average SNR mobility model: adaptive n* vs fixed n_fix."""
+    rng = np.random.default_rng(seed)
+    snr_walk = np.clip(
+        np.cumsum(rng.normal(0.0, snr_drift, size=T)) + snr_mean_dB, -5.0, 35.0
+    )
+    snr_grid    = np.linspace(-5, 35, 300)
+    n_star_grid = compute_optimal_n(k_val, R_val, Ptarget_val).astype(float)
+    n_star_blk  = np.clip(
+        np.interp(snr_walk, snr_grid, n_star_grid).astype(int), k_val, k_val + 200
+    )
+    p_rx    = np.clip(1.0 - erasure_prob(10.0 ** (snr_walk / 10.0), R_val), 0.0, 1.0)
+    rx_adp  = rng.binomial(n_star_blk, p_rx)
+    dec_adp = (rx_adp >= k_val).astype(float)
+    eta_adp = np.where(dec_adp, k_val * R_val / n_star_blk, 0.0)
+    rx_fix  = rng.binomial(np.full(T, n_fix_val, dtype=int), p_rx)
+    dec_fix = (rx_fix >= k_val).astype(float)
+    eta_fix = np.where(dec_fix, k_val * R_val / n_fix_val, 0.0)
+    return snr_walk, n_star_blk, dec_adp, dec_fix, eta_adp, eta_fix
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Fixed SNR grid  (used across all figures)
 # ─────────────────────────────────────────────────────────────────────────────
 SNR_DB  = np.linspace(-5, 35, 300)
@@ -336,6 +445,9 @@ tabs = st.tabs([
     "📡  Interference Alignment",
     "🔋  Energy Efficiency",
     "📋  Summary Table",
+    "🎲  Live RLNC Decoder",
+    "🛰️  Multicast Race",
+    "🌊  Fading Channel",
 ])
 
 
@@ -888,6 +1000,489 @@ with tabs[5]:
         **LAYOUT_BASE,
     )
     st.plotly_chart(bar_fig, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 7 — Live RLNC Decoder vs Routing Race
+# ══════════════════════════════════════════════════════════════════════════════
+with tabs[6]:
+    st.markdown("### Live GF(2) RLNC Decoder vs Routing — Step-by-Step Race")
+    st.markdown(
+        '<div class="eq-box">'
+        'RLNC sends random GF(2) linear combinations of k source packets. '
+        'Decode when rank(G) = k &nbsp;[Eq. 5]. &nbsp;&nbsp;'
+        'Routing (cycling broadcast): needs all k distinct source packets.'
+        '</div>', unsafe_allow_html=True,
+    )
+
+    lc, lsim = st.columns([1, 3])
+    with lc:
+        snr_lv  = st.slider("Channel SNR (dB)", -5, 35, 15, 1, key="lv_snr")
+        eps_lv  = float(erasure_prob(np.array([10.0 ** (snr_lv / 10.0)]), R_rate)[0])
+        st.metric("Erasure ε", f"{eps_lv:.3f}")
+        st.metric("k (source packets)", k)
+        st.markdown("---")
+        b1     = st.button("📤 +1 Packet",    key="lv1",   use_container_width=True)
+        b10    = st.button("📦 +10 Packets",  key="lv10",  use_container_width=True)
+        b50    = st.button("⚡ +50 Packets",  key="lv50",  use_container_width=True)
+        b_run  = st.button("▶ Run to Decode", key="lv_run", type="primary",
+                           use_container_width=True)
+        b_rst  = st.button("🔄 Reset",         key="lv_rst", use_container_width=True)
+
+    # ── Session state init ────────────────────────────────────────────────────
+    if "lv_rng" not in st.session_state or b_rst:
+        st.session_state.lv_rng       = np.random.default_rng(
+            int(np.random.default_rng().integers(0, 99999))
+        )
+        st.session_state.lv_buf       = []
+        st.session_state.lv_flags     = []
+        st.session_state.lv_rt_rx     = set()
+        st.session_state.lv_rank_hist = []
+        st.session_state.lv_rt_hist   = []
+        st.session_state.lv_n_tx      = 0
+        st.session_state.lv_rlnc_done = False
+        st.session_state.lv_rt_done   = False
+
+    if b1:    _lv_step(1,           k, eps_lv)
+    if b10:   _lv_step(10,          k, eps_lv)
+    if b50:   _lv_step(50,          k, eps_lv)
+    if b_run: _lv_step(15 * k + 200, k, eps_lv)
+
+    # ── Display ───────────────────────────────────────────────────────────────
+    ntx  = st.session_state.lv_n_tx
+    rank = st.session_state.lv_rank_hist[-1] if st.session_state.lv_rank_hist else 0
+    rt_c = len(st.session_state.lv_rt_rx)
+
+    with lsim:
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Transmissions", ntx)
+        m2.metric("RLNC Rank",   f"{rank}/{k}",
+                  delta="DECODED ✓" if st.session_state.lv_rlnc_done else None)
+        m3.metric("Routing pkts", f"{rt_c}/{k}",
+                  delta="DECODED ✓" if st.session_state.lv_rt_done else None)
+
+        if st.session_state.lv_rlnc_done and st.session_state.lv_rt_done:
+            rlnc_t = st.session_state.lv_rlnc_t
+            rt_t   = st.session_state.lv_rt_t
+            diff   = rt_t - rlnc_t
+            if diff > 0:
+                st.success(
+                    f"🏆 RLNC decoded **{diff} slot(s) earlier** "
+                    f"(t = {rlnc_t}) than routing (t = {rt_t}). "
+                    f"NC advantage: {diff / rt_t * 100:.0f}% fewer transmissions."
+                )
+            elif diff < 0:
+                st.warning(
+                    f"Routing decoded at t = {rt_t}, RLNC at t = {rlnc_t}. "
+                    f"High ε can delay RLNC occasionally — try resetting or lowering ε."
+                )
+            else:
+                st.info(f"Both decoded simultaneously at t = {rlnc_t}.")
+
+        # Generator matrix heatmap
+        buf_lv = st.session_state.lv_buf
+        if buf_lv:
+            mat = np.array(buf_lv, dtype=float)
+            full_rank = rank >= k
+            fig_mat = go.Figure(go.Heatmap(
+                z=mat,
+                colorscale=[[0, "#f0f5ff"], [1, COLORS["blue"]]],
+                showscale=False, xgap=1, ygap=1,
+                hovertemplate="Pkt %{y} · Symbol %{x}: coeff = %{z}<extra></extra>",
+            ))
+            fig_mat.update_layout(
+                title=(
+                    f"Generator Matrix G  ({len(buf_lv)} received × {k} source symbols)"
+                    f"  —  Rank = {rank} "
+                    f"{'✅  Full rank — DECODED!' if full_rank else f'  ({k - rank} more needed)'}"
+                ),
+                xaxis_title="Source symbol index j",
+                yaxis_title="Received coded packet i",
+                height=max(180, min(390, 70 + len(buf_lv) * 15)),
+                margin=dict(l=65, r=15, t=58, b=50),
+                yaxis=dict(autorange="reversed"),
+                font=dict(family="Times New Roman, serif", size=12),
+            )
+            st.plotly_chart(fig_mat, use_container_width=True)
+        else:
+            st.info("Press **+1 Packet** or **▶ Run to Decode** to start the simulation.")
+
+    # Race progress chart (full width)
+    if st.session_state.lv_rank_hist:
+        rh   = st.session_state.lv_rank_hist
+        rth  = st.session_state.lv_rt_hist
+        fl   = st.session_state.lv_flags
+        xs   = list(range(1, ntx + 1))
+
+        fig_race = go.Figure()
+        fig_race.add_trace(go.Scatter(
+            x=xs, y=rh, mode="lines",
+            name="RLNC Rank",
+            line=dict(color=COLORS["blue"], width=2.5),
+        ))
+        fig_race.add_trace(go.Scatter(
+            x=xs, y=rth, mode="lines",
+            name="Routing (distinct pkts)",
+            line=dict(color=COLORS["green"], dash="dash", width=2.0),
+        ))
+        erased_xs = [i + 1 for i, f in enumerate(fl) if not f]
+        if erased_xs:
+            fig_race.add_trace(go.Scatter(
+                x=erased_xs, y=[0.0] * len(erased_xs), mode="markers",
+                name="Erased ✗",
+                marker=dict(color=COLORS["red"], size=7, symbol="x"),
+            ))
+        fig_race.add_hline(y=k, line_dash="dot", line_color="gray",
+                           annotation_text=f"k = {k}", annotation_position="right")
+        if st.session_state.lv_rlnc_done:
+            fig_race.add_vline(
+                x=st.session_state.lv_rlnc_t, line_dash="dot",
+                line_color=COLORS["blue"],
+                annotation_text=f"RLNC ✓  t={st.session_state.lv_rlnc_t}",
+                annotation_position="top right",
+            )
+        if st.session_state.lv_rt_done:
+            fig_race.add_vline(
+                x=st.session_state.lv_rt_t, line_dash="dot",
+                line_color=COLORS["green"],
+                annotation_text=f"Route ✓  t={st.session_state.lv_rt_t}",
+                annotation_position="top left",
+            )
+        fig_race.update_layout(
+            title=f"RLNC Rank vs Routing Progress  —  SNR = {snr_lv} dB,  ε = {eps_lv:.3f}",
+            xaxis_title="Transmission Slot",
+            yaxis_title="Rank / Distinct Packets Received",
+            yaxis_range=[-0.5, k + 1.5],
+            legend=dict(x=0.02, y=0.95),
+        )
+        apply_base(fig_race, height=320)
+        st.plotly_chart(fig_race, use_container_width=True)
+
+    st.caption(
+        f"GF(2) RLNC: each received non-zero packet is innovative (rank increases) with "
+        f"probability ≈ 1 − rank/k per step (Schwartz–Zippel). Cycling routing must collect "
+        f"all k = {k} distinct source packets; a burst of erasures can repeatedly miss "
+        f"the same source packet. RLNC is immune — any k linearly independent combinations "
+        f"decode the block. Over GF(2⁸) the rank-deficiency probability is < k/256 ≈ "
+        f"{k/256:.3f}, negligible in practice."
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 8 — Wireless Multicast Race: RLNC vs Routing
+# ══════════════════════════════════════════════════════════════════════════════
+with tabs[7]:
+    st.markdown("### Wireless Multicast: RLNC vs Routing Across M Receivers")
+    st.markdown(
+        '<div class="eq-box">'
+        'One source broadcasts to M receivers, each with an independent Rayleigh erasure '
+        'channel (same ε per link). RLNC: any k received coded packets → decode. '
+        'Routing: needs all k distinct source packets (cycling broadcast, no feedback).'
+        '</div>', unsafe_allow_html=True,
+    )
+
+    mc_c, mc_res = st.columns([1, 3])
+    with mc_c:
+        M_recv  = st.slider("M — Receivers",      2, 16,   8,   1,  key="mc_M")
+        snr_mc  = st.slider("SNR (dB)",          -5, 35,  10,   1,  key="mc_snr")
+        N_mc    = st.slider("Broadcast slots",    k,  6*k, 3*k,  k,  key="mc_N")
+        mc_seed = st.number_input("Seed", 0, 9999, 7, 1, key="mc_seed")
+        eps_mc  = float(erasure_prob(np.array([10.0 ** (snr_mc / 10.0)]), R_rate)[0])
+        st.metric("ε (per link)", f"{eps_mc:.3f}")
+        exp_t = k / (1.0 - eps_mc) if eps_mc < 1.0 else float("inf")
+        st.metric("E[decode slots] ≈", f"{exp_t:.1f}")
+        st.caption("Parameters update the simulation automatically.")
+
+    with st.spinner("Simulating multicast …"):
+        rlnc_t, route_t, rx_mask = _cached_multicast(
+            M_recv, k, float(snr_mc), R_rate, N_mc, int(mc_seed)
+        )
+
+    rlnc_decoded  = int((rlnc_t  <= N_mc).sum())
+    route_decoded = int((route_t <= N_mc).sum())
+
+    with mc_res:
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("RLNC decoded",    f"{rlnc_decoded}/{M_recv}")
+        a2.metric("Routing decoded", f"{route_decoded}/{M_recv}")
+        rlnc_valid  = rlnc_t[rlnc_t   <= N_mc]
+        route_valid = route_t[route_t  <= N_mc]
+        a3.metric(
+            "RLNC mean slot",
+            f"{rlnc_valid.mean():.1f}"  if len(rlnc_valid)  else "—",
+            delta=(f"vs {route_valid.mean():.1f} routing"
+                   if len(route_valid) else None),
+        )
+        a4.metric(
+            "All decoded (RLNC)",
+            "✅ Yes" if rlnc_decoded == M_recv else f"❌ {M_recv - rlnc_decoded} missed",
+            delta_color="normal" if rlnc_decoded == M_recv else "inverse",
+        )
+
+    # Reception heatmap
+    fig_hm = go.Figure(go.Heatmap(
+        z=rx_mask,
+        colorscale=[[0, "#fde8e8"], [1, "#c6dbf7"]],
+        showscale=True,
+        colorbar=dict(
+            title="",
+            tickvals=[0.25, 0.75],
+            ticktext=["Erased", "Received"],
+            lenmode="fraction", len=0.5,
+        ),
+        xgap=0.4, ygap=1.2,
+        hovertemplate="Rx %{y} · Slot %{x}: %{z}<extra></extra>",
+    ))
+    # Overlay decode-time markers
+    ys_all = list(range(M_recv))
+    fig_hm.add_trace(go.Scatter(
+        x=np.clip(rlnc_t - 1, 0, N_mc - 1), y=ys_all, mode="markers",
+        name="RLNC decoded (★)",
+        marker=dict(color=COLORS["green"], size=13, symbol="star",
+                    line=dict(color="white", width=1.2)),
+    ))
+    fig_hm.add_trace(go.Scatter(
+        x=np.clip(route_t - 1, 0, N_mc - 1), y=ys_all, mode="markers",
+        name="Routing decoded (◆)",
+        marker=dict(color=COLORS["orange"], size=10, symbol="diamond",
+                    line=dict(color="white", width=1.2)),
+    ))
+    fig_hm.update_layout(
+        title=(
+            f"Packet Reception Matrix — {M_recv} receivers × {N_mc} slots"
+            f"  (SNR = {snr_mc} dB,  ε = {eps_mc:.3f})"
+        ),
+        xaxis_title="Broadcast Slot",
+        yaxis_title="Receiver Index",
+        yaxis=dict(tickmode="linear", dtick=1),
+        height=max(280, 65 + M_recv * 30),
+        legend=dict(x=0.02, y=1.08, orientation="h"),
+        margin=dict(l=55, r=20, t=60, b=50),
+        font=dict(family="Times New Roman, serif", size=12),
+        plot_bgcolor="#fafafa", paper_bgcolor="white",
+    )
+    st.plotly_chart(fig_hm, use_container_width=True)
+
+    # Per-receiver decode time bar chart
+    recv_ids = [f"Rx {m}" for m in range(M_recv)]
+    rlnc_bar  = np.where(rlnc_t  <= N_mc, rlnc_t,  N_mc + 3).tolist()
+    route_bar = np.where(route_t <= N_mc, route_t, N_mc + 3).tolist()
+
+    fig_bar = go.Figure()
+    fig_bar.add_trace(go.Bar(
+        name="RLNC decode slot", x=recv_ids, y=rlnc_bar,
+        marker_color=COLORS["blue"],
+        text=[f"{int(t)}" if t <= N_mc else "DNF" for t in rlnc_t],
+        textposition="outside",
+    ))
+    fig_bar.add_trace(go.Bar(
+        name="Routing decode slot", x=recv_ids, y=route_bar,
+        marker_color=COLORS["orange"],
+        text=[f"{int(t)}" if t <= N_mc else "DNF" for t in route_t],
+        textposition="outside",
+    ))
+    fig_bar.add_hline(y=N_mc, line_dash="dot", line_color="gray",
+                      annotation_text="Budget limit", annotation_position="right")
+    fig_bar.update_layout(
+        title="Decode Slot per Receiver — RLNC vs Routing",
+        xaxis_title="Receiver",
+        yaxis_title="Slot at which decoding succeeds",
+        barmode="group",
+        yaxis_range=[0, N_mc + 6],
+        legend=dict(x=0.02, y=0.95),
+    )
+    apply_base(fig_bar, height=360)
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.caption(
+        "★ = RLNC decode event. ◆ = routing decode event. "
+        "RLNC typically decodes earlier because any k received combinations suffice. "
+        "Routing (cycling) is blocked if even one source packet is never received "
+        "within the broadcast window (DNF = Did Not Finish). "
+        "In a 5G NR multicast scenario this directly translates to fewer retransmission "
+        "rounds and lower latency for all receivers."
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 9 — Rayleigh Fading Channel + Adaptive n* Live Replay
+# ══════════════════════════════════════════════════════════════════════════════
+with tabs[8]:
+    st.markdown("### Rayleigh Block-Fading Channel — Adaptive n* vs Fixed Overhead")
+    st.markdown(
+        '<div class="eq-box">'
+        'Mobility model: average SNR γ̄(t) follows a random walk (σ dB/block). '
+        'Adaptive n*(γ̄) [Eq. 8] tracks the channel and minimises coded-packet overhead. '
+        'Fixed n_fix wastes overhead at high SNR and risks outage at low SNR.'
+        '</div>', unsafe_allow_html=True,
+    )
+
+    fd_c, fd_res = st.columns([1, 3])
+    with fd_c:
+        T_blocks = st.slider("T — Coherence blocks",   50, 500, 200,  50, key="fd_T")
+        snr_fd   = st.slider("Mean SNR (dB)",          -5,  35,  15,   1, key="fd_snr")
+        drift_fd = st.slider("SNR drift σ (dB/block)", 0.0, 3.0, 0.8, 0.1, key="fd_drift",
+                             help="0 = static channel; higher = faster mobility")
+        fd_seed  = st.number_input("Seed", 0, 9999, 13, 1, key="fd_seed")
+        T_show   = st.slider("▶ Reveal up to block", 1, T_blocks, T_blocks, 1,
+                             key="fd_Tshow",
+                             help="Drag left to replay the fading simulation block-by-block")
+        st.caption("All parameters auto-update. Drag 'Reveal' to animate.")
+
+    with st.spinner("Simulating fading channel …"):
+        snr_walk, n_star_blk, dec_adp, dec_fix, eta_adp, eta_fix = _cached_fading(
+            T_blocks, float(snr_fd), float(drift_fd),
+            k, R_rate, n_fix, Ptarget, int(fd_seed)
+        )
+
+    t_axis = np.arange(1, T_blocks + 1)
+    t_sel  = t_axis[:T_show]
+    sw_sel = snr_walk[:T_show]
+    ns_sel = n_star_blk[:T_show]
+    da_sel = dec_adp[:T_show]
+    df_sel = dec_fix[:T_show]
+    ea_sel = eta_adp[:T_show]
+    ef_sel = eta_fix[:T_show]
+
+    with fd_res:
+        fd_m1, fd_m2, fd_m3, fd_m4 = st.columns(4)
+        fd_m1.metric("Adaptive η (mean)", f"{ea_sel.mean():.3f} b/c.u.")
+        fd_m2.metric("Fixed η (mean)",    f"{ef_sel.mean():.3f} b/c.u.")
+        gain_fd = (ea_sel.mean() - ef_sel.mean()) / (ef_sel.mean() + 1e-9) * 100
+        fd_m3.metric("Throughput gain", f"+{gain_fd:.1f}%",
+                     delta="adaptive vs fixed")
+        fd_m4.metric("Avg n* saved/block",
+                     f"{(n_fix - ns_sel.mean()):.1f}",
+                     delta=f"{(n_fix - ns_sel.mean()) / n_fix * 100:.0f}% fewer tx")
+
+    # ── Plot 1: SNR random walk + n* adaptation (dual Y-axis) ─────────────────
+    fig_fd1 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_fd1.add_trace(go.Scatter(
+        x=t_sel, y=sw_sel, mode="lines",
+        name="SNR γ̄(t) dB",
+        line=dict(color=COLORS["blue"], width=1.8),
+        fill="tozeroy", fillcolor="rgba(31,119,180,0.08)",
+    ), secondary_y=False)
+    fig_fd1.add_trace(go.Scatter(
+        x=t_sel, y=ns_sel.astype(float), mode="lines",
+        name="Adaptive n*(t)",
+        line=dict(color=COLORS["red"], width=2.2),
+    ), secondary_y=True)
+    fig_fd1.add_hline(y=n_fix, line_dash="dot", line_color=COLORS["blue"],
+                      annotation_text=f"n_fix = {n_fix}",
+                      annotation_position="bottom right",
+                      secondary_y=True)
+    fig_fd1.add_hline(y=float(snr_fd), line_dash="dot", line_color=COLORS["gray"],
+                      opacity=0.5, annotation_text=f"Mean = {snr_fd} dB",
+                      annotation_position="right", secondary_y=False)
+    fig_fd1.update_layout(
+        title=f"Channel SNR Random Walk & Adaptive n*(t)  (σ = {drift_fd} dB/block)",
+        font=dict(family="Times New Roman, serif", size=13),
+        plot_bgcolor="#fafafa", paper_bgcolor="white",
+        margin=dict(l=65, r=70, t=60, b=50),
+        hovermode="x unified",
+        legend=dict(x=0.02, y=0.95, bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
+        height=360,
+    )
+    fig_fd1.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="#e0e0e0")
+    fig_fd1.update_yaxes(title_text="Average SNR γ̄ (dB)",
+                         showgrid=True, gridcolor="#e0e0e0", secondary_y=False)
+    fig_fd1.update_yaxes(title_text="n* (coded packets per block)",
+                         showgrid=False, secondary_y=True)
+    st.plotly_chart(fig_fd1, use_container_width=True)
+
+    # ── Plot 2: per-block throughput + cumulative throughput ──────────────────
+    cum_adp = np.cumsum(ea_sel)
+    cum_fix = np.cumsum(ef_sel)
+
+    fig_fd2 = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=("Per-Block Throughput η(t)",
+                        "Cumulative Throughput  Σ η(t)"),
+    )
+
+    # Per-block throughput
+    fig_fd2.add_trace(go.Scatter(
+        x=t_sel, y=ea_sel, mode="lines",
+        name="Adaptive n*",
+        line=dict(color=COLORS["red"], width=1.8),
+    ), row=1, col=1)
+    fig_fd2.add_trace(go.Scatter(
+        x=t_sel, y=ef_sel, mode="lines",
+        name=f"Fixed n = {n_fix}",
+        line=dict(color=COLORS["blue"], dash="dash", width=1.5),
+    ), row=1, col=1)
+    # Mark outage events with red/blue crosses
+    fail_adp_idx = np.where(da_sel == 0)[0]
+    fail_fix_idx = np.where(df_sel == 0)[0]
+    if len(fail_adp_idx):
+        fig_fd2.add_trace(go.Scatter(
+            x=t_sel[fail_adp_idx], y=np.zeros(len(fail_adp_idx)), mode="markers",
+            name="Adaptive outage",
+            marker=dict(color=COLORS["red"], size=6, symbol="x-thin-open",
+                        line=dict(width=2)),
+        ), row=1, col=1)
+    if len(fail_fix_idx):
+        fig_fd2.add_trace(go.Scatter(
+            x=t_sel[fail_fix_idx], y=np.zeros(len(fail_fix_idx)), mode="markers",
+            name="Fixed outage",
+            marker=dict(color=COLORS["blue"], size=6, symbol="x-thin-open",
+                        line=dict(width=2)),
+        ), row=1, col=1)
+
+    # Cumulative throughput
+    fig_fd2.add_trace(go.Scatter(
+        x=t_sel, y=cum_adp, mode="lines",
+        name="Σ Adaptive",
+        line=dict(color=COLORS["red"], width=2.2),
+        showlegend=False,
+    ), row=1, col=2)
+    fig_fd2.add_trace(go.Scatter(
+        x=t_sel, y=cum_fix, mode="lines",
+        name=f"Σ Fixed n={n_fix}",
+        line=dict(color=COLORS["blue"], dash="dash", width=2.0),
+        showlegend=False,
+    ), row=1, col=2)
+    # Shade the throughput gap
+    fig_fd2.add_trace(go.Scatter(
+        x=np.concatenate([t_sel, t_sel[::-1]]),
+        y=np.concatenate([cum_adp, cum_fix[::-1]]),
+        fill="toself", fillcolor="rgba(214,39,40,0.12)",
+        line=dict(width=0), name="Throughput gain", showlegend=False,
+    ), row=1, col=2)
+
+    fig_fd2.update_layout(
+        height=340,
+        font=dict(family="Times New Roman, serif", size=12),
+        plot_bgcolor="#fafafa", paper_bgcolor="white",
+        margin=dict(l=55, r=30, t=55, b=50),
+        hovermode="x unified",
+        legend=dict(x=0.01, y=0.95, bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
+    )
+    fig_fd2.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="#e0e0e0")
+    fig_fd2.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
+    st.plotly_chart(fig_fd2, use_container_width=True)
+
+    # ── Outage / efficiency summary ───────────────────────────────────────────
+    out_adp = 1.0 - da_sel.mean()
+    out_fix = 1.0 - df_sel.mean()
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Adaptive outage",   f"{out_adp:.3f}",
+              delta=f"target ≤ {Ptarget}",
+              delta_color="normal" if out_adp <= Ptarget * 1.5 else "inverse")
+    s2.metric("Fixed outage",      f"{out_fix:.3f}")
+    s3.metric("n* mean",           f"{ns_sel.mean():.1f} pkts/block",
+              delta=f"vs n_fix = {n_fix}")
+    s4.metric("Blocks revealed",   f"{T_show} / {T_blocks}")
+
+    st.caption(
+        f"Drag the **'Reveal up to block'** slider to replay the fading sequence block-by-block. "
+        f"The adaptive scheme tracks γ̄(t) and reduces n* when the channel is good — "
+        f"saving overhead and boosting spectral efficiency — then increases n* when the "
+        f"channel degrades to maintain P_out ≤ P_target = {Ptarget}. "
+        f"Fixed n_fix = {n_fix} cannot adapt: it wastes resources at high SNR "
+        f"and still fails at very low SNR (outage crosses mark failed blocks)."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
