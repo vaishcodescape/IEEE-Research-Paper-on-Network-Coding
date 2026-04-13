@@ -1257,7 +1257,7 @@ with tabs[7]:
     mc_c, mc_res = st.columns([1, 3])
     with mc_c:
         M_recv  = st.slider("M — Receivers",      2, 16,   8,   1,  key="mc_M")
-        snr_mc  = st.slider("SNR (dB)",          -5, 35,  10,   1,  key="mc_snr")
+        snr_mc  = st.slider("SNR (dB)",          -5, 35,  10,   1,  key="mc_snr_slider")
         N_mc    = st.slider("Broadcast slots",    k,  6*k, 3*k,  k,  key="mc_N")
         mc_seed = st.number_input("Seed", 0, 9999, 7, 1, key="mc_seed")
         eps_mc  = float(erasure_prob(np.array([10.0 ** (snr_mc / 10.0)]), R_rate)[0])
