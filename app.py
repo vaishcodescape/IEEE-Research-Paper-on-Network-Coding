@@ -5,7 +5,7 @@ A Unified Cross-Layer Network Coding Architecture
 for Wireless Multicast Under Interference
 Group 19 — IEEE Research Paper Simulation
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Run with:  streamlit run app.py
+ 
 """
 
 import numpy as np
@@ -32,44 +32,65 @@ st.markdown("""
 <style>
     /* Header */
     .paper-title {
-        font-size: 1.55rem;
-        font-weight: 700;
-        color: #0d3b66;
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #0a2e52;
         text-align: center;
-        line-height: 1.3;
-        margin-bottom: 0.15rem;
+        line-height: 1.35;
+        margin-bottom: 0.2rem;
+        letter-spacing: -0.02em;
     }
     .paper-sub {
-        font-size: 0.9rem;
-        color: #555;
+        font-size: 0.95rem;
+        color: #444;
         text-align: center;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.6rem;
+        font-weight: 500;
     }
     /* Metric cards */
-    [data-testid="stMetricValue"] { font-size: 1.6rem !important; }
+    [data-testid="stMetricValue"] {
+        font-size: 1.65rem !important;
+        font-weight: 700 !important;
+        color: #1a1a2e !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+    }
     /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
-        border-radius: 6px 6px 0 0;
-        padding: 6px 18px;
-        font-weight: 600;
+        border-radius: 8px 8px 0 0;
+        padding: 8px 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
     }
     /* Equation highlight */
     .eq-box {
-        background: #f0f6ff;
-        border-left: 4px solid #1f77b4;
-        padding: 0.5rem 1rem;
-        border-radius: 0 6px 6px 0;
-        font-family: monospace;
-        margin: 0.4rem 0;
+        background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 100%);
+        border-left: 5px solid #2563eb;
+        padding: 0.7rem 1.2rem;
+        border-radius: 0 8px 8px 0;
+        font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 0.92rem;
+        margin: 0.5rem 0;
+        color: #1a1a2e;
+        line-height: 1.6;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     /* Info card */
     .info-card {
         background: #fff8e1;
         border: 1px solid #ffe082;
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        padding: 0.85rem 1.1rem;
         margin: 0.5rem 0;
+    }
+    /* Captions */
+    .stCaption {
+        color: #555 !important;
+        font-size: 0.84rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -92,7 +113,7 @@ def decode_prob_analytical(k: int, n: int, snr_lin: np.ndarray, R: float) -> np.
 @st.cache_data(show_spinner=False)
 def compute_optimal_n(k: int, R: float, Ptarget: float) -> np.ndarray:
     """n*(γ̄,R) = min n ≥ k : Pd ≥ 1−Ptarget  [Eq. 8]"""
-    snr_lin = 10.0 ** (np.linspace(-5, 35, 300) / 10.0)
+    snr_lin = 10.0 ** (np.linspace(-5, 35, 500) / 10.0)
     n_star = np.zeros(len(snr_lin), dtype=int)
     for i, snr in enumerate(snr_lin):
         eps_i = erasure_prob(np.array([snr]), R)[0]
@@ -161,29 +182,43 @@ def ia_sumrates(snr_lin: np.ndarray, beta: float, K: int) -> tuple:
 # Plotly theme helper
 # ─────────────────────────────────────────────────────────────────────────────
 COLORS = {
-    "blue":   "#1f77b4",
-    "orange": "#ff7f0e",
-    "green":  "#2ca02c",
-    "red":    "#d62728",
-    "purple": "#9467bd",
-    "gray":   "#7f7f7f",
+    "blue":   "#2563eb",
+    "orange": "#ea580c",
+    "green":  "#16a34a",
+    "red":    "#dc2626",
+    "purple": "#7c3aed",
+    "gray":   "#6b7280",
 }
 
 LAYOUT_BASE = dict(
-    font=dict(family="Times New Roman, serif", size=13),
-    plot_bgcolor="#fafafa",
+    font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13, color="#1a1a2e"),
+    plot_bgcolor="#fafbff",
     paper_bgcolor="white",
-    margin=dict(l=60, r=30, t=60, b=55),
+    margin=dict(l=65, r=35, t=65, b=60),
     hovermode="x unified",
-    legend=dict(bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
+    hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ccc"),
+    legend=dict(
+        bgcolor="rgba(255,255,255,0.92)",
+        borderwidth=1,
+        bordercolor="#ddd",
+        font=dict(size=12, color="#333"),
+    ),
 )
 
-def apply_base(fig: go.Figure, height: int = 420) -> go.Figure:
+def apply_base(fig: go.Figure, height: int = 440) -> go.Figure:
     fig.update_layout(height=height, **LAYOUT_BASE)
-    fig.update_xaxes(showgrid=True, gridcolor="#e0e0e0",
-                     zeroline=False, mirror=True, linecolor="#aaa")
-    fig.update_yaxes(showgrid=True, gridcolor="#e0e0e0",
-                     zeroline=False, mirror=True, linecolor="#aaa")
+    fig.update_xaxes(
+        showgrid=True, gridcolor="#e8ecf2", gridwidth=1,
+        zeroline=False, mirror=True, linecolor="#bbb", linewidth=1.2,
+        title_font=dict(size=13, color="#333"),
+        tickfont=dict(size=11, color="#555"),
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor="#e8ecf2", gridwidth=1,
+        zeroline=False, mirror=True, linecolor="#bbb", linewidth=1.2,
+        title_font=dict(size=13, color="#333"),
+        tickfont=dict(size=11, color="#555"),
+    )
     return fig
 
 
@@ -281,7 +316,7 @@ def _cached_fading(T: int, snr_mean_dB: float, snr_drift: float,
     snr_walk = np.clip(
         np.cumsum(rng.normal(0.0, snr_drift, size=T)) + snr_mean_dB, -5.0, 35.0
     )
-    snr_grid    = np.linspace(-5, 35, 300)
+    snr_grid    = np.linspace(-5, 35, 500)
     n_star_grid = compute_optimal_n(k_val, R_val, Ptarget_val).astype(float)
     n_star_blk  = np.clip(
         np.interp(snr_walk, snr_grid, n_star_grid).astype(int), k_val, k_val + 200
@@ -299,7 +334,7 @@ def _cached_fading(T: int, snr_mean_dB: float, snr_drift: float,
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixed SNR grid  (used across all figures)
 # ─────────────────────────────────────────────────────────────────────────────
-SNR_DB  = np.linspace(-5, 35, 300)
+SNR_DB  = np.linspace(-5, 35, 500)
 SNR_LIN = 10.0 ** (SNR_DB / 10.0)
 
 
@@ -475,7 +510,7 @@ with tabs[0]:
             fig1.add_trace(go.Scatter(
                 x=SNR_DB, y=eps_r, mode="lines",
                 name=f"R = {R_val} b/c.u.",
-                line=dict(color=col, width=2.2),
+                line=dict(color=col, width=2.5, shape="spline", smoothing=1.0),
             ))
         if show_ref:
             fig1.add_vline(x=6, line_dash="dot", line_color="gray", opacity=0.6,
@@ -500,7 +535,7 @@ with tabs[0]:
         fig3.add_trace(go.Scatter(
             x=SNR_DB, y=Pd_curve, mode="lines",
             name="Analytical (Eq. 5)",
-            line=dict(color=COLORS["blue"], width=2.5),
+            line=dict(color=COLORS["blue"], width=2.8, shape="spline", smoothing=1.0),
         ))
 
         # Monte Carlo overlay
@@ -584,17 +619,17 @@ with tabs[1]:
         fig4.add_trace(go.Scatter(
             x=SNR_DB, y=Pout_routing, mode="lines",
             name="Routing",
-            line=dict(color=COLORS["green"], dash="dash", width=2),
+            line=dict(color=COLORS["green"], dash="dash", width=2.5, shape="spline", smoothing=1.0),
         ))
         fig4.add_trace(go.Scatter(
             x=SNR_DB, y=1.0 - Pd_fixed, mode="lines",
             name=f"Fixed RLNC (n={n_fix})",
-            line=dict(color=COLORS["blue"], dash="dashdot", width=2),
+            line=dict(color=COLORS["blue"], dash="dashdot", width=2.5, shape="spline", smoothing=1.0),
         ))
         fig4.add_trace(go.Scatter(
             x=SNR_DB, y=Pout_adaptive, mode="lines",
             name="Adaptive n*",
-            line=dict(color=COLORS["red"], width=2.5),
+            line=dict(color=COLORS["red"], width=2.8, shape="spline", smoothing=1.0),
         ))
         if show_ref:
             fig4.add_hline(y=Ptarget, line_dash="dot", line_color="gray",
@@ -647,7 +682,7 @@ with tabs[1]:
         fig5.add_trace(go.Scatter(
             x=SNR_DB, y=n_star.astype(float), mode="lines",
             name="Adaptive n*(γ̄)",
-            line=dict(color=COLORS["red"], width=2.5),
+            line=dict(color=COLORS["red"], width=2.8, shape="spline", smoothing=0.8),
         ))
         fig5.add_hline(y=n_fix, line_dash="dash", line_color=COLORS["blue"],
                        annotation_text=f"n_fix = {n_fix}",
@@ -687,17 +722,17 @@ with tabs[2]:
     fig6.add_trace(go.Scatter(
         x=SNR_DB, y=eta_adaptive, mode="lines",
         name="Adaptive n*",
-        line=dict(color=COLORS["red"], width=2.8),
+        line=dict(color=COLORS["red"], width=3, shape="spline", smoothing=1.0),
     ))
     fig6.add_trace(go.Scatter(
         x=SNR_DB, y=eta_fixed, mode="lines",
         name=f"Fixed RLNC (n={n_fix})",
-        line=dict(color=COLORS["blue"], dash="dash", width=2.2),
+        line=dict(color=COLORS["blue"], dash="dash", width=2.5),
     ))
     fig6.add_trace(go.Scatter(
         x=SNR_DB, y=eta_routing, mode="lines",
         name="Routing  [R·(1−ε)]",
-        line=dict(color=COLORS["green"], dash="dot", width=2.2),
+        line=dict(color=COLORS["green"], dash="dot", width=2.5, shape="spline", smoothing=1.0),
     ))
     if show_ref:
         fig6.add_hline(y=R_rate, line_dash="dot", line_color="gray", opacity=0.5,
@@ -764,9 +799,9 @@ with tabs[3]:
         fig2.add_trace(go.Scatter(
             x=SNR_DB, y=p_rank, mode="lines",
             name=f"P(rank cond. | β={beta})",
-            line=dict(color=COLORS["red"], width=2.5),
+            line=dict(color=COLORS["red"], width=2.8, shape="spline", smoothing=1.0),
             fill="tozeroy",
-            fillcolor="rgba(214,39,40,0.10)",
+            fillcolor="rgba(220,38,38,0.08)",
         ))
         fig2.add_hline(y=0.9, line_dash="dot", line_color="gray",
                        annotation_text="0.9", annotation_position="right")
@@ -796,17 +831,17 @@ with tabs[3]:
         fig7.add_trace(go.Scatter(
             x=SNR_DB, y=R_perfect, mode="lines",
             name="Perfect-CSI IA",
-            line=dict(color=COLORS["blue"], width=2.2),
+            line=dict(color=COLORS["blue"], width=2.5, shape="spline", smoothing=1.0),
         ))
         fig7.add_trace(go.Scatter(
             x=SNR_DB, y=R_imperfect, mode="lines",
             name=f"Plain IA  (β={beta})",
-            line=dict(color=COLORS["red"], dash="dash", width=2.2),
+            line=dict(color=COLORS["red"], dash="dash", width=2.5, shape="spline", smoothing=1.0),
         ))
         fig7.add_trace(go.Scatter(
             x=SNR_DB, y=R_ianc, mode="lines",
             name="IA + NC",
-            line=dict(color=COLORS["green"], width=2.8),
+            line=dict(color=COLORS["green"], width=3, shape="spline", smoothing=1.0),
         ))
 
         if show_ref and beta == 0.1:
@@ -868,17 +903,18 @@ with tabs[4]:
     )
 
     fig8 = go.Figure()
-    fig8.add_trace(go.Scatter(
-        x=SNR_DB, y=eta_EE_adaptive, mode="lines",
-        name="Adaptive n*",
-        line=dict(color=COLORS["red"], width=2.8),
-        fill="tonexty",
-        fillcolor="rgba(214,39,40,0.10)",
-    ))
+    # Fixed line first so adaptive can fill down to it
     fig8.add_trace(go.Scatter(
         x=SNR_DB, y=eta_EE_fixed, mode="lines",
         name=f"Fixed RLNC (n={n_fix})",
-        line=dict(color=COLORS["blue"], dash="dash", width=2.2),
+        line=dict(color=COLORS["blue"], dash="dash", width=2.5),
+    ))
+    fig8.add_trace(go.Scatter(
+        x=SNR_DB, y=eta_EE_adaptive, mode="lines",
+        name="Adaptive n*",
+        line=dict(color=COLORS["red"], width=3, shape="spline", smoothing=1.0),
+        fill="tonexty",
+        fillcolor="rgba(220,38,38,0.08)",
     ))
 
     # Annotate gain at 20 dB
@@ -1086,7 +1122,7 @@ with tabs[6]:
             full_rank = rank >= k
             fig_mat = go.Figure(go.Heatmap(
                 z=mat,
-                colorscale=[[0, "#f0f5ff"], [1, COLORS["blue"]]],
+                colorscale=[[0, "#f0f4ff"], [0.5, "#93b5f5"], [1, "#2563eb"]],
                 showscale=False, xgap=1, ygap=1,
                 hovertemplate="Pkt %{y} · Symbol %{x}: coeff = %{z}<extra></extra>",
             ))
@@ -1101,7 +1137,7 @@ with tabs[6]:
                 height=max(180, min(390, 70 + len(buf_lv) * 15)),
                 margin=dict(l=65, r=15, t=58, b=50),
                 yaxis=dict(autorange="reversed"),
-                font=dict(family="Times New Roman, serif", size=12),
+                font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
             )
             st.plotly_chart(fig_mat, use_container_width=True)
         else:
@@ -1118,12 +1154,12 @@ with tabs[6]:
         fig_race.add_trace(go.Scatter(
             x=xs, y=rh, mode="lines",
             name="RLNC Rank",
-            line=dict(color=COLORS["blue"], width=2.5),
+            line=dict(color=COLORS["blue"], width=2.8, shape="spline", smoothing=0.6),
         ))
         fig_race.add_trace(go.Scatter(
             x=xs, y=rth, mode="lines",
             name="Routing (distinct pkts)",
-            line=dict(color=COLORS["green"], dash="dash", width=2.0),
+            line=dict(color=COLORS["green"], dash="dash", width=2.2, shape="spline", smoothing=0.6),
         ))
         erased_xs = [i + 1 for i, f in enumerate(fl) if not f]
         if erased_xs:
@@ -1222,7 +1258,7 @@ with tabs[7]:
     # Reception heatmap
     fig_hm = go.Figure(go.Heatmap(
         z=rx_mask,
-        colorscale=[[0, "#fde8e8"], [1, "#c6dbf7"]],
+        colorscale=[[0, "#fde8e8"], [0.5, "#e8d5f0"], [1, "#b3d4fc"]],
         showscale=True,
         colorbar=dict(
             title="",
@@ -1258,8 +1294,8 @@ with tabs[7]:
         height=max(280, 65 + M_recv * 30),
         legend=dict(x=0.02, y=1.08, orientation="h"),
         margin=dict(l=55, r=20, t=60, b=50),
-        font=dict(family="Times New Roman, serif", size=12),
-        plot_bgcolor="#fafafa", paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
+        plot_bgcolor="#fafbff", paper_bgcolor="white",
     )
     st.plotly_chart(fig_hm, use_container_width=True)
 
@@ -1360,13 +1396,13 @@ with tabs[8]:
     fig_fd1.add_trace(go.Scatter(
         x=t_sel, y=sw_sel, mode="lines",
         name="SNR γ̄(t) dB",
-        line=dict(color=COLORS["blue"], width=1.8),
-        fill="tozeroy", fillcolor="rgba(31,119,180,0.08)",
+        line=dict(color=COLORS["blue"], width=2, shape="spline", smoothing=0.5),
+        fill="tozeroy", fillcolor="rgba(37,99,235,0.06)",
     ), secondary_y=False)
     fig_fd1.add_trace(go.Scatter(
         x=t_sel, y=ns_sel.astype(float), mode="lines",
         name="Adaptive n*(t)",
-        line=dict(color=COLORS["red"], width=2.2),
+        line=dict(color=COLORS["red"], width=2.5, shape="spline", smoothing=0.5),
     ), secondary_y=True)
     fig_fd1.add_hline(y=n_fix, line_dash="dot", line_color=COLORS["blue"],
                       annotation_text=f"n_fix = {n_fix}",
@@ -1377,8 +1413,8 @@ with tabs[8]:
                       annotation_position="right", secondary_y=False)
     fig_fd1.update_layout(
         title=f"Channel SNR Random Walk & Adaptive n*(t)  (σ = {drift_fd} dB/block)",
-        font=dict(family="Times New Roman, serif", size=13),
-        plot_bgcolor="#fafafa", paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13, color="#1a1a2e"),
+        plot_bgcolor="#fafbff", paper_bgcolor="white",
         margin=dict(l=65, r=70, t=60, b=50),
         hovermode="x unified",
         legend=dict(x=0.02, y=0.95, bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
@@ -1405,12 +1441,12 @@ with tabs[8]:
     fig_fd2.add_trace(go.Scatter(
         x=t_sel, y=ea_sel, mode="lines",
         name="Adaptive n*",
-        line=dict(color=COLORS["red"], width=1.8),
+        line=dict(color=COLORS["red"], width=2.2, shape="spline", smoothing=0.4),
     ), row=1, col=1)
     fig_fd2.add_trace(go.Scatter(
         x=t_sel, y=ef_sel, mode="lines",
         name=f"Fixed n = {n_fix}",
-        line=dict(color=COLORS["blue"], dash="dash", width=1.5),
+        line=dict(color=COLORS["blue"], dash="dash", width=1.8, shape="spline", smoothing=0.4),
     ), row=1, col=1)
     # Mark outage events with red/blue crosses
     fail_adp_idx = np.where(da_sel == 0)[0]
@@ -1434,13 +1470,13 @@ with tabs[8]:
     fig_fd2.add_trace(go.Scatter(
         x=t_sel, y=cum_adp, mode="lines",
         name="Σ Adaptive",
-        line=dict(color=COLORS["red"], width=2.2),
+        line=dict(color=COLORS["red"], width=2.5, shape="spline", smoothing=0.3),
         showlegend=False,
     ), row=1, col=2)
     fig_fd2.add_trace(go.Scatter(
         x=t_sel, y=cum_fix, mode="lines",
         name=f"Σ Fixed n={n_fix}",
-        line=dict(color=COLORS["blue"], dash="dash", width=2.0),
+        line=dict(color=COLORS["blue"], dash="dash", width=2.2, shape="spline", smoothing=0.3),
         showlegend=False,
     ), row=1, col=2)
     # Shade the throughput gap
@@ -1453,8 +1489,8 @@ with tabs[8]:
 
     fig_fd2.update_layout(
         height=340,
-        font=dict(family="Times New Roman, serif", size=12),
-        plot_bgcolor="#fafafa", paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
+        plot_bgcolor="#fafbff", paper_bgcolor="white",
         margin=dict(l=55, r=30, t=55, b=50),
         hovermode="x unified",
         legend=dict(x=0.01, y=0.95, bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
@@ -1490,7 +1526,7 @@ with tabs[8]:
 # ─────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    "<div style='text-align:center; color:#888; font-size:0.82rem;'>"
+    "<div style='text-align:center; color:#666; font-size:0.85rem; line-height:1.6; padding:0.5rem 0;'>"
     "Group 19 — Kavya Patel, Om Patel, Aditya Vaish, Tirth Patel, Ved Bhoraniya, "
     "Uma Sainitin Burra, Samyak Shah, Harsh Patel, Sukun Dalal, Shrey Patel, "
     "Yashvi Doshi, Tanishk Dhawan, Chetan Raghav<br>"
