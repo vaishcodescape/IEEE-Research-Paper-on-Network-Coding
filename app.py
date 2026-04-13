@@ -67,7 +67,7 @@ st.markdown("""
     }
     /* Equation highlight */
     .eq-box {
-        background: rgba(37, 99, 235, 0.1);
+        background: rgba(37, 99, 235, 0.08);
         border-left: 5px solid #2563eb;
         padding: 0.7rem 1.2rem;
         border-radius: 0 8px 8px 0;
@@ -76,12 +76,11 @@ st.markdown("""
         margin: 0.5rem 0;
         color: inherit;
         line-height: 1.6;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     /* Info card */
     .info-card {
-        background: rgba(255, 248, 225, 0.15);
-        border: 1px solid rgba(255, 224, 130, 0.4);
+        background: rgba(128, 128, 128, 0.08);
+        border: 1px solid rgba(128, 128, 128, 0.25);
         border-radius: 10px;
         padding: 0.85rem 1.1rem;
         margin: 0.5rem 0;
@@ -219,33 +218,33 @@ def reset_live_decoder(params: tuple[int, float], seed: int | None = None) -> No
     st.session_state.lv_params    = params
 
 LAYOUT_BASE = dict(
-    font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13, color="#1a1a2e"),
-    plot_bgcolor="#fafbff",
-    paper_bgcolor="white",
+    font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13),
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor="rgba(0,0,0,0)",
     margin=dict(l=65, r=35, t=65, b=60),
     hovermode="x unified",
-    hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ccc"),
+    hoverlabel=dict(font_size=12),
     legend=dict(
-        bgcolor="rgba(255,255,255,0.92)",
+        bgcolor="rgba(128,128,128,0.1)",
         borderwidth=1,
-        bordercolor="#ddd",
-        font=dict(size=12, color="#333"),
+        bordercolor="rgba(128,128,128,0.3)",
+        font=dict(size=12),
     ),
 )
 
 def apply_base(fig: go.Figure, height: int = 440) -> go.Figure:
     fig.update_layout(height=height, **LAYOUT_BASE)
     fig.update_xaxes(
-        showgrid=True, gridcolor="#e8ecf2", gridwidth=1,
-        zeroline=False, mirror=True, linecolor="#bbb", linewidth=1.2,
-        title_font=dict(size=13, color="#333"),
-        tickfont=dict(size=11, color="#555"),
+        showgrid=True, gridcolor="rgba(128,128,128,0.2)", gridwidth=1,
+        zeroline=False, mirror=True, linecolor="rgba(128,128,128,0.4)", linewidth=1.2,
+        title_font=dict(size=13),
+        tickfont=dict(size=11),
     )
     fig.update_yaxes(
-        showgrid=True, gridcolor="#e8ecf2", gridwidth=1,
-        zeroline=False, mirror=True, linecolor="#bbb", linewidth=1.2,
-        title_font=dict(size=13, color="#333"),
-        tickfont=dict(size=11, color="#555"),
+        showgrid=True, gridcolor="rgba(128,128,128,0.2)", gridwidth=1,
+        zeroline=False, mirror=True, linecolor="rgba(128,128,128,0.4)", linewidth=1.2,
+        title_font=dict(size=13),
+        tickfont=dict(size=11),
     )
     return fig
 
@@ -404,7 +403,7 @@ with st.sidebar:
     N_MC = st.select_slider("Trials", options=[5_000, 10_000, 20_000], value=20_000,
                              format_func=lambda x: f"{x:,}")
     run_mc_btn = st.button("▶  Run Monte Carlo", type="primary",
-                           width="stretch")
+                           use_container_width=True)
 
     st.markdown("---")
     show_ref = st.checkbox("Show paper reference values", value=True)
@@ -498,6 +497,14 @@ c4.metric(
 )
 st.markdown("---")
 
+with st.expander("How to use this dashboard", expanded=False):
+    st.markdown(
+        "1. **Adjust parameters** in the sidebar (RLNC, IA, Energy settings).\n"
+        "2. **Browse tabs** below to explore different performance dimensions.\n"
+        "3. **Run Monte Carlo** from the sidebar to validate analytical curves.\n"
+        "4. **Live simulations** (tabs 7-9) let you step through packet-by-packet or block-by-block.\n"
+        "5. Toggle **'Show paper reference values'** in the sidebar to overlay reference data from the paper."
+    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
@@ -520,13 +527,14 @@ tabs = st.tabs([
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[0]:
     st.markdown("### Cross-Layer Erasure & Decode Probability (Figs. 1 & 3)")
-    st.markdown(
-        '<div class="eq-box">'
-        'ε(γ̄, R) = 1 − exp(−(2<sup>R</sup>−1) / γ̄) &nbsp;&nbsp;[Eq. 3]&nbsp;&nbsp;&nbsp;&nbsp;'
-        'P<sub>d</sub> = 1 − F<sub>Bin</sub>(n, 1−ε)(k−1) &nbsp;&nbsp;[Eq. 5]'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'ε(γ̄, R) = 1 − exp(−(2<sup>R</sup>−1) / γ̄) &nbsp;&nbsp;[Eq. 3]&nbsp;&nbsp;&nbsp;&nbsp;'
+            'P<sub>d</sub> = 1 − F<sub>Bin</sub>(n, 1−ε)(k−1) &nbsp;&nbsp;[Eq. 5]'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     col_a, col_b = st.columns(2)
 
@@ -600,9 +608,9 @@ with tabs[0]:
                     x=22, y=0.92,
                     text="Analytical ↔ MC agree<br>within 0.3%",
                     showarrow=False,
-                    bgcolor="rgba(255,255,200,0.9)",
-                    bordercolor="#aaa", borderwidth=1,
-                    font=dict(size=11, color="green"),
+                    bgcolor="rgba(128,128,100,0.2)",
+                    bordercolor="rgba(128,128,128,0.5)", borderwidth=1,
+                    font=dict(size=11, color=COLORS["green"]),
                 )
 
         fig3.update_layout(
@@ -632,13 +640,14 @@ with tabs[0]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[1]:
     st.markdown("### Outage Probability & Optimal Coded-Packet Count (Figs. 4 & 5)")
-    st.markdown(
-        '<div class="eq-box">'
-        'P<sub>out</sub> = F<sub>Bin</sub>(n, 1−ε)(k−1) &nbsp;&nbsp;[Eq. 6]&nbsp;&nbsp;&nbsp;&nbsp;'
-        'n*(γ̄, R) = min {n ≥ k : P_d ≥ 1 − P_target} &nbsp;&nbsp;[Eq. 8]'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'P<sub>out</sub> = F<sub>Bin</sub>(n, 1−ε)(k−1) &nbsp;&nbsp;[Eq. 6]&nbsp;&nbsp;&nbsp;&nbsp;'
+            'n*(γ̄, R) = min {n ≥ k : P_d ≥ 1 − P_target} &nbsp;&nbsp;[Eq. 8]'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     col_a, col_b = st.columns(2)
 
@@ -738,14 +747,15 @@ with tabs[1]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[2]:
     st.markdown("### Spectral Efficiency η vs SNR (Fig. 6)")
-    st.markdown(
-        '<div class="eq-box">'
-        'η = kR / n &nbsp;&nbsp;&nbsp; Adaptive: η = kR / n*(γ̄) &nbsp;&nbsp;&nbsp;'
-        'Fixed: η = kR / n_fix = '
-        f'{k*R_rate/n_fix:.3f} b/c.u.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'η = kR / n &nbsp;&nbsp;&nbsp; Adaptive: η = kR / n*(γ̄) &nbsp;&nbsp;&nbsp;'
+            'Fixed: η = kR / n_fix = '
+            f'{k*R_rate/n_fix:.3f} b/c.u.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     fig6 = go.Figure()
     fig6.add_trace(go.Scatter(
@@ -777,7 +787,7 @@ with tabs[2]:
         x=15, y=y_mid,
         text=f"<b>Δη = {delta_eta:.2f} b/c.u.<br>({eta_gain_pct:.0f}% gain)</b>",
         showarrow=True, arrowhead=2, ax=70, ay=0,
-        bgcolor="rgba(255,255,220,0.92)", bordercolor="#888", borderwidth=1,
+        bgcolor="rgba(128,128,100,0.2)", bordercolor="rgba(128,128,128,0.5)", borderwidth=1,
         font=dict(size=12),
     )
 
@@ -786,12 +796,9 @@ with tabs[2]:
         xaxis_title="Average SNR γ̄ (dB)",
         yaxis_title="Spectral Efficiency η (b/c.u.)",
         yaxis_range=[0, R_rate * 1.18],
-        height=520,
-        **LAYOUT_BASE,
+        legend=dict(x=0.65, y=0.15),
     )
-    fig6.update_layout(legend=dict(x=0.65, y=0.15))
-    fig6.update_xaxes(showgrid=True, gridcolor="#e0e0e0")
-    fig6.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
+    apply_base(fig6, height=520)
     st.plotly_chart(fig6, width="stretch")
 
     # Metric columns
@@ -812,13 +819,14 @@ with tabs[2]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[3]:
     st.markdown("### Interference Alignment + Network Coding (Figs. 2 & 7)")
-    st.markdown(
-        '<div class="eq-box">'
-        'Two-pass receiver: Pass 1 → interference suppression (MMSE)  |  '
-        'Pass 2 → structured residual recycled as RLNC decoding equation [§IV-B]'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'Two-pass receiver: Pass 1 → interference suppression (MMSE)  |  '
+            'Pass 2 → structured residual recycled as RLNC decoding equation [§IV-B]'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     col_a, col_b = st.columns(2)
 
@@ -928,13 +936,14 @@ with tabs[3]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[4]:
     st.markdown("### Energy Efficiency η_EE vs SNR (Fig. 8)")
-    st.markdown(
-        '<div class="eq-box">'
-        'η_EE = Σ R_j / (P_t + P_c)  [Eq. 13] &nbsp;&nbsp;—&nbsp;&nbsp;'
-        'Adaptive n* ↓ transmissions → lower P_t → higher η_EE'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'η_EE = Σ R_j / (P_t + P_c)  [Eq. 13] &nbsp;&nbsp;—&nbsp;&nbsp;'
+            'Adaptive n* ↓ transmissions → lower P_t → higher η_EE'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     fig8 = go.Figure()
     # Fixed line first so adaptive can fill down to it
@@ -958,7 +967,7 @@ with tabs[4]:
         x=20, y=(eta_EE_adaptive[idx20] + eta_EE_fixed[idx20]) / 2,
         text=f"<b>+{ee_gain_20:.0f}%<br>EE gain</b>",
         showarrow=True, arrowhead=2, ax=60, ay=0,
-        bgcolor="rgba(255,255,220,0.9)", bordercolor="#888", borderwidth=1,
+        bgcolor="rgba(128,128,100,0.2)", bordercolor="rgba(128,128,128,0.5)", borderwidth=1,
         font=dict(size=12),
     )
 
@@ -966,12 +975,9 @@ with tabs[4]:
         title=f"<b>Fig 8</b> — Energy Efficiency vs SNR  (P_c = {Pc_mW} mW, k={k})",
         xaxis_title="Average SNR γ̄ (dB)",
         yaxis_title="Energy Efficiency η_EE  (bits/J)",
-        height=520,
-        **LAYOUT_BASE,
+        legend=dict(x=0.05, y=0.90),
     )
-    fig8.update_layout(legend=dict(x=0.05, y=0.90))
-    fig8.update_xaxes(showgrid=True, gridcolor="#e0e0e0")
-    fig8.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
+    apply_base(fig8, height=520)
     st.plotly_chart(fig8, width="stretch")
 
     m1, m2, m3 = st.columns(3)
@@ -1077,13 +1083,14 @@ with tabs[5]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[6]:
     st.markdown("### Live GF(2) RLNC Decoder vs Routing — Step-by-Step Race")
-    st.markdown(
-        '<div class="eq-box">'
-        'RLNC sends random GF(2) linear combinations of k source packets. '
-        'Decode when rank(G) = k &nbsp;[Eq. 5]. &nbsp;&nbsp;'
-        'Routing (cycling broadcast): needs all k distinct source packets.'
-        '</div>', unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'RLNC sends random GF(2) linear combinations of k source packets. '
+            'Decode when rank(G) = k &nbsp;[Eq. 5]. &nbsp;&nbsp;'
+            'Routing (cycling broadcast): needs all k distinct source packets.'
+            '</div>', unsafe_allow_html=True,
+        )
 
     lc, lsim = st.columns([1, 3])
     with lc:
@@ -1096,7 +1103,7 @@ with tabs[6]:
         b10    = st.button("📦 +10 Packets",  key="lv10",  width="stretch")
         b50    = st.button("⚡ +50 Packets",  key="lv50",  width="stretch")
         b_run  = st.button("▶ Run to Decode", key="lv_run", type="primary",
-                           width="stretch")
+                           use_container_width=True)
         b_rst  = st.button("🔄 Reset",         key="lv_rst", width="stretch")
 
     # ── Session state init ────────────────────────────────────────────────────
@@ -1166,7 +1173,7 @@ with tabs[6]:
                 height=max(180, min(390, 70 + len(buf_lv) * 15)),
                 margin=dict(l=65, r=15, t=58, b=50),
                 yaxis=dict(autorange="reversed"),
-                font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
+                font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12),
             )
             st.plotly_chart(fig_mat, width="stretch")
         else:
@@ -1238,13 +1245,14 @@ with tabs[6]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[7]:
     st.markdown("### Wireless Multicast: RLNC vs Routing Across M Receivers")
-    st.markdown(
-        '<div class="eq-box">'
-        'One source broadcasts to M receivers, each with an independent Rayleigh erasure '
-        'channel (same ε per link). RLNC: any k received coded packets → decode. '
-        'Routing: needs all k distinct source packets (cycling broadcast, no feedback).'
-        '</div>', unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'One source broadcasts to M receivers, each with an independent Rayleigh erasure '
+            'channel (same ε per link). RLNC: any k received coded packets → decode. '
+            'Routing: needs all k distinct source packets (cycling broadcast, no feedback).'
+            '</div>', unsafe_allow_html=True,
+        )
 
     mc_c, mc_res = st.columns([1, 3])
     with mc_c:
@@ -1323,8 +1331,8 @@ with tabs[7]:
         height=max(280, 65 + M_recv * 30),
         legend=dict(x=0.02, y=1.08, orientation="h"),
         margin=dict(l=55, r=20, t=60, b=50),
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
-        plot_bgcolor="#fafbff", paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig_hm, width="stretch")
 
@@ -1374,13 +1382,14 @@ with tabs[7]:
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[8]:
     st.markdown("### Rayleigh Block-Fading Channel — Adaptive n* vs Fixed Overhead")
-    st.markdown(
-        '<div class="eq-box">'
-        'Mobility model: average SNR γ̄(t) follows a random walk (σ dB/block). '
-        'Adaptive n*(γ̄) [Eq. 8] tracks the channel and minimises coded-packet overhead. '
-        'Fixed n_fix wastes overhead at high SNR and risks outage at low SNR.'
-        '</div>', unsafe_allow_html=True,
-    )
+    with st.expander("Show governing equations", expanded=False):
+        st.markdown(
+            '<div class="eq-box">'
+            'Mobility model: average SNR γ̄(t) follows a random walk (σ dB/block). '
+            'Adaptive n*(γ̄) [Eq. 8] tracks the channel and minimises coded-packet overhead. '
+            'Fixed n_fix wastes overhead at high SNR and risks outage at low SNR.'
+            '</div>', unsafe_allow_html=True,
+        )
 
     fd_c, fd_res = st.columns([1, 3])
     with fd_c:
@@ -1442,16 +1451,16 @@ with tabs[8]:
                       annotation_position="right", secondary_y=False)
     fig_fd1.update_layout(
         title=f"Channel SNR Random Walk & Adaptive n*(t)  (σ = {drift_fd} dB/block)",
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13, color="#1a1a2e"),
-        plot_bgcolor="#fafbff", paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=65, r=70, t=60, b=50),
         hovermode="x unified",
-        legend=dict(x=0.02, y=0.95, bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
+        legend=dict(x=0.02, y=0.95, bgcolor="rgba(128,128,128,0.1)", borderwidth=1),
         height=360,
     )
-    fig_fd1.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="#e0e0e0")
+    fig_fd1.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="rgba(128,128,128,0.2)")
     fig_fd1.update_yaxes(title_text="Average SNR γ̄ (dB)",
-                         showgrid=True, gridcolor="#e0e0e0", secondary_y=False)
+                         showgrid=True, gridcolor="rgba(128,128,128,0.2)", secondary_y=False)
     fig_fd1.update_yaxes(title_text="n* (coded packets per block)",
                          showgrid=False, secondary_y=True)
     st.plotly_chart(fig_fd1, width="stretch")
@@ -1518,14 +1527,14 @@ with tabs[8]:
 
     fig_fd2.update_layout(
         height=340,
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
-        plot_bgcolor="#fafbff", paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=55, r=30, t=55, b=50),
         hovermode="x unified",
-        legend=dict(x=0.01, y=0.95, bgcolor="rgba(255,255,255,0.85)", borderwidth=1),
+        legend=dict(x=0.01, y=0.95, bgcolor="rgba(128,128,128,0.1)", borderwidth=1),
     )
-    fig_fd2.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="#e0e0e0")
-    fig_fd2.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
+    fig_fd2.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="rgba(128,128,128,0.2)")
+    fig_fd2.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.2)")
     st.plotly_chart(fig_fd2, width="stretch")
 
     # ── Outage / efficiency summary ───────────────────────────────────────────
@@ -1555,12 +1564,16 @@ with tabs[8]:
 # ─────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    "<div style='text-align:center; color:#666; font-size:0.85rem; line-height:1.6; padding:0.5rem 0;'>"
-    "Group 19 — Kavya Patel, Om Patel, Aditya Vaish, Tirth Patel, Ved Bhoraniya, "
-    "Uma Sainitin Burra, Samyak Shah, Harsh Patel, Sukun Dalal, Shrey Patel, "
-    "Yashvi Doshi, Tanishk Dhawan, Chetan Raghav<br>"
-    "B.Tech. ICT — School of Technology, Dhirubhai Ambani University, Gandhinagar<br>"
-    "RLNC + IA Cross-Layer Simulation | GF(2⁸) | 3GPP TR 38.901 (28 GHz UMi)"
+    "<div style='text-align:center; color:inherit; opacity:0.6; font-size:0.85rem; "
+    "line-height:1.8; padding:0.5rem 0;'>"
+    "<b>Group 19</b> — B.Tech. ICT, Dhirubhai Ambani University, Gandhinagar<br>"
+    "Kavya Patel &middot; Om Patel &middot; Aditya Vaish &middot; Tirth Patel &middot; "
+    "Ved Bhoraniya &middot; Uma Sainitin Burra &middot; Samyak Shah &middot; "
+    "Harsh Patel &middot; Sukun Dalal &middot; Shrey Patel &middot; "
+    "Yashvi Doshi &middot; Tanishk Dhawan &middot; Chetan Raghav<br>"
+    "<span style='font-size:0.8rem;'>"
+    "RLNC + IA Cross-Layer Simulation &nbsp;|&nbsp; GF(2&#x2078;) &nbsp;|&nbsp; "
+    "3GPP TR 38.901 (28 GHz UMi)</span>"
     "</div>",
     unsafe_allow_html=True,
 )
