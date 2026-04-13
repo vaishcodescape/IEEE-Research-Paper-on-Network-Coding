@@ -34,7 +34,7 @@ st.markdown("""
     .paper-title {
         font-size: 1.7rem;
         font-weight: 800;
-        color: #0a2e52;
+        color: inherit;
         text-align: center;
         line-height: 1.35;
         margin-bottom: 0.2rem;
@@ -42,7 +42,8 @@ st.markdown("""
     }
     .paper-sub {
         font-size: 0.95rem;
-        color: #444;
+        color: inherit;
+        opacity: 0.75;
         text-align: center;
         margin-bottom: 0.6rem;
         font-weight: 500;
@@ -51,12 +52,10 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         font-size: 1.65rem !important;
         font-weight: 700 !important;
-        color: #1a1a2e !important;
     }
     [data-testid="stMetricLabel"] {
         font-size: 0.85rem !important;
         font-weight: 600 !important;
-        color: #333 !important;
     }
     /* Tab styling */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
@@ -68,28 +67,28 @@ st.markdown("""
     }
     /* Equation highlight */
     .eq-box {
-        background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 100%);
+        background: rgba(37, 99, 235, 0.1);
         border-left: 5px solid #2563eb;
         padding: 0.7rem 1.2rem;
         border-radius: 0 8px 8px 0;
         font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
         font-size: 0.92rem;
         margin: 0.5rem 0;
-        color: #1a1a2e;
+        color: inherit;
         line-height: 1.6;
         box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     /* Info card */
     .info-card {
-        background: #fff8e1;
-        border: 1px solid #ffe082;
+        background: rgba(255, 248, 225, 0.15);
+        border: 1px solid rgba(255, 224, 130, 0.4);
         border-radius: 10px;
         padding: 0.85rem 1.1rem;
         margin: 0.5rem 0;
+        color: inherit;
     }
     /* Captions */
     .stCaption {
-        color: #555 !important;
         font-size: 0.84rem !important;
     }
 </style>
@@ -757,10 +756,10 @@ with tabs[2]:
         xaxis_title="Average SNR γ̄ (dB)",
         yaxis_title="Spectral Efficiency η (b/c.u.)",
         yaxis_range=[0, R_rate * 1.18],
-        legend=dict(x=0.65, y=0.15),
         height=520,
         **LAYOUT_BASE,
     )
+    fig6.update_layout(legend=dict(x=0.65, y=0.15))
     fig6.update_xaxes(showgrid=True, gridcolor="#e0e0e0")
     fig6.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
     st.plotly_chart(fig6, use_container_width=True)
@@ -932,10 +931,10 @@ with tabs[4]:
         title=f"<b>Fig 8</b> — Energy Efficiency vs SNR  (P_c = {Pc_mW} mW, k={k})",
         xaxis_title="Average SNR γ̄ (dB)",
         yaxis_title="Energy Efficiency η_EE  (bits/J)",
-        legend=dict(x=0.05, y=0.90),
         height=520,
         **LAYOUT_BASE,
     )
+    fig8.update_layout(legend=dict(x=0.05, y=0.90))
     fig8.update_xaxes(showgrid=True, gridcolor="#e0e0e0")
     fig8.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
     st.plotly_chart(fig8, use_container_width=True)
@@ -1031,10 +1030,10 @@ with tabs[5]:
         yaxis=dict(title="Spectral Efficiency η (b/c.u.)", range=[0, R_rate * 1.25]),
         yaxis2=dict(title="Decode Probability P_d", overlaying="y", side="right",
                     range=[0, 1.15]),
-        legend=dict(x=0.35, y=1.02, orientation="h"),
         height=400,
         **LAYOUT_BASE,
     )
+    bar_fig.update_layout(legend=dict(x=0.35, y=1.02, orientation="h"))
     st.plotly_chart(bar_fig, use_container_width=True)
 
 
