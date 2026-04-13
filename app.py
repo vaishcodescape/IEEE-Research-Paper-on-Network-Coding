@@ -144,6 +144,13 @@ def rank_condition_prob(snr_lin: np.ndarray, beta: float) -> np.ndarray:
     eff = beta * snr_lin
     return np.clip(1.0 - np.exp(-eff / 5.0), 0.0, 1.0)
 
+def first_crossing(x_vals: np.ndarray, y_vals: np.ndarray, threshold: float) -> float | None:
+    """Return the first x where y reaches threshold, or None if it never does."""
+    matches = np.flatnonzero(y_vals >= threshold)
+    if len(matches) == 0:
+        return None
+    return float(x_vals[int(matches[0])])
+
 
 def ia_sumrates(snr_lin: np.ndarray, beta: float, K: int) -> tuple:
     """
@@ -188,6 +195,28 @@ COLORS = {
     "purple": "#7c3aed",
     "gray":   "#6b7280",
 }
+
+def hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert #RRGGBB colors to Plotly-safe rgba(...) strings."""
+    value = hex_color.lstrip("#")
+    r, g, b = (int(value[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+def reset_live_decoder(params: tuple[int, float], seed: int | None = None) -> None:
+    """Initialize live decoder session state for the current sidebar parameters."""
+    rng = np.random.default_rng(seed)
+    st.session_state.lv_rng       = np.random.default_rng(int(rng.integers(0, 99999)))
+    st.session_state.lv_buf       = []
+    st.session_state.lv_flags     = []
+    st.session_state.lv_rt_rx     = set()
+    st.session_state.lv_rank_hist = []
+    st.session_state.lv_rt_hist   = []
+    st.session_state.lv_n_tx      = 0
+    st.session_state.lv_rlnc_done = False
+    st.session_state.lv_rt_done   = False
+    st.session_state.lv_rlnc_t    = None
+    st.session_state.lv_rt_t      = None
+    st.session_state.lv_params    = params
 
 LAYOUT_BASE = dict(
     font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13, color="#1a1a2e"),
@@ -355,7 +384,8 @@ with st.sidebar:
         "P_target — Outage target",
         options=[0.001, 0.01, 0.05, 0.10], value=0.01,
         format_func=lambda x: f"{x:.3f}")
-    n_fix = st.slider("n_fix — Fixed baseline", k, 30, 18, 1,
+    n_fix_default = min(max(18, k), 30)
+    n_fix = st.slider("n_fix — Fixed baseline", k, 30, n_fix_default, 1,
                       help="Fixed coded-packet count (worst-case design)")
 
     st.markdown("---")
@@ -374,7 +404,7 @@ with st.sidebar:
     N_MC = st.select_slider("Trials", options=[5_000, 10_000, 20_000], value=20_000,
                              format_func=lambda x: f"{x:,}")
     run_mc_btn = st.button("▶  Run Monte Carlo", type="primary",
-                           use_container_width=True)
+                           width="stretch")
 
     st.markdown("---")
     show_ref = st.checkbox("Show paper reference values", value=True)
@@ -523,7 +553,7 @@ with tabs[0]:
             legend=dict(x=0.60, y=0.95),
         )
         apply_base(fig1)
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width="stretch")
         st.caption("Higher spectral rates require much greater SNR for low erasure. "
                    "Equation (3) maps physical-layer fading directly to packet-loss probability.")
 
@@ -583,7 +613,7 @@ with tabs[0]:
             legend=dict(x=0.05, y=0.60),
         )
         apply_base(fig3)
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, width="stretch")
 
         if not mc_ready:
             st.info("Press **▶ Run Monte Carlo** in the sidebar to overlay MC points on this figure.")
@@ -645,7 +675,7 @@ with tabs[1]:
             legend=dict(x=0.45, y=0.95),
         )
         apply_base(fig4)
-        st.plotly_chart(fig4, use_container_width=True)
+        st.plotly_chart(fig4, width="stretch")
         st.caption("Adaptive n* guarantees P_out ≤ P_target at all SNRs. "
                    "Fixed RLNC fails below ≈6 dB; routing has poor diversity.")
 
@@ -697,7 +727,7 @@ with tabs[1]:
             legend=dict(x=0.60, y=0.90),
         )
         apply_base(fig5)
-        st.plotly_chart(fig5, use_container_width=True)
+        st.plotly_chart(fig5, width="stretch")
         st.caption(f"Above ≈6 dB the adaptive scheme reclaims wasted overhead. "
                    f"At 12 dB: n* = {n_star[idx12]}, saving "
                    f"{n_fix - n_star[idx12]} packets ({tx_saved_pct:.0f}%) vs fixed baseline.")
@@ -762,7 +792,7 @@ with tabs[2]:
     fig6.update_layout(legend=dict(x=0.65, y=0.15))
     fig6.update_xaxes(showgrid=True, gridcolor="#e0e0e0")
     fig6.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
-    st.plotly_chart(fig6, use_container_width=True)
+    st.plotly_chart(fig6, width="stretch")
 
     # Metric columns
     m1, m2, m3, m4 = st.columns(4)
@@ -804,12 +834,13 @@ with tabs[3]:
         ))
         fig2.add_hline(y=0.9, line_dash="dot", line_color="gray",
                        annotation_text="0.9", annotation_position="right")
-        # Find SNR where p_rank ≥ 0.9
-        cross_idx = int(np.argmax(p_rank >= 0.9))
-        if cross_idx > 0:
-            fig2.add_vline(x=SNR_DB[cross_idx], line_dash="dot",
+        # Find SNR where p_rank reaches the highlighted thresholds.
+        rank_cross_90 = first_crossing(SNR_DB, p_rank, 0.9)
+        rank_cross_95 = first_crossing(SNR_DB, p_rank, 0.95)
+        if rank_cross_90 is not None:
+            fig2.add_vline(x=rank_cross_90, line_dash="dot",
                            line_color=COLORS["orange"], opacity=0.8,
-                           annotation_text=f"{SNR_DB[cross_idx]:.0f} dB",
+                           annotation_text=f"{rank_cross_90:.0f} dB",
                            annotation_position="top right")
         fig2.update_layout(
             title=f"<b>Fig 2</b> — IA Residual Rank Condition Probability  (β={beta}, q=256)",
@@ -818,11 +849,15 @@ with tabs[3]:
             yaxis_range=[0, 1.08],
         )
         apply_base(fig2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
+        rank_caption = (
+            f"At β={beta} saturation ≈ 1.0 occurs around {rank_cross_95:.0f} dB."
+            if rank_cross_95 is not None
+            else f"At β={beta} the 0.95 rank-condition level is not reached in this SNR range."
+        )
         st.caption(f"When this probability is high, the aligned IA residual provides "
                    f"an extra decoding equation to RLNC, reducing retransmissions. "
-                   f"At β={beta} saturation ≈ 1.0 occurs around "
-                   f"{SNR_DB[int(np.argmax(p_rank >= 0.95))]:.0f} dB.")
+                   f"{rank_caption}")
 
     # ── Fig 7 ─────────────────────────────────────────────────────────────────
     with col_b:
@@ -876,7 +911,7 @@ with tabs[3]:
             legend=dict(x=0.05, y=0.90),
         )
         apply_base(fig7)
-        st.plotly_chart(fig7, use_container_width=True)
+        st.plotly_chart(fig7, width="stretch")
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Perfect CSI @ 30 dB",   f"{R_perfect[idx30]:.1f} bps/Hz")
@@ -937,7 +972,7 @@ with tabs[4]:
     fig8.update_layout(legend=dict(x=0.05, y=0.90))
     fig8.update_xaxes(showgrid=True, gridcolor="#e0e0e0")
     fig8.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
-    st.plotly_chart(fig8, use_container_width=True)
+    st.plotly_chart(fig8, width="stretch")
 
     m1, m2, m3 = st.columns(3)
     m1.metric(f"EE Adaptive @ 20 dB",  f"{eta_EE_adaptive[idx20]:.2f} b/J")
@@ -991,7 +1026,7 @@ with tabs[5]:
         f"#### γ̄ = {snr_sel} dB &nbsp;|&nbsp; k = {k} &nbsp;|&nbsp; "
         f"R = {R_rate} b/c.u. &nbsp;|&nbsp; ε = {eps_sel:.4f}"
     )
-    st.dataframe(table_df, use_container_width=True, hide_index=True)
+    st.dataframe(table_df, width="stretch", hide_index=True)
 
     if show_ref and snr_sel == 12 and k == 10 and abs(R_rate - 1.0) < 0.01:
         st.info(
@@ -1014,7 +1049,7 @@ with tabs[5]:
 
     bar_fig.add_trace(go.Bar(
         name="η (b/c.u.)", x=schemes, y=etas,
-        marker_color=[c + "bb" for c in bar_colors],
+        marker_color=[hex_to_rgba(c, 0.73) for c in bar_colors],
         text=[f"{v:.3f}" for v in etas], textposition="outside",
         yaxis="y",
     ))
@@ -1034,7 +1069,7 @@ with tabs[5]:
         **LAYOUT_BASE,
     )
     bar_fig.update_layout(legend=dict(x=0.35, y=1.02, orientation="h"))
-    st.plotly_chart(bar_fig, use_container_width=True)
+    st.plotly_chart(bar_fig, width="stretch")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1057,26 +1092,21 @@ with tabs[6]:
         st.metric("Erasure ε", f"{eps_lv:.3f}")
         st.metric("k (source packets)", k)
         st.markdown("---")
-        b1     = st.button("📤 +1 Packet",    key="lv1",   use_container_width=True)
-        b10    = st.button("📦 +10 Packets",  key="lv10",  use_container_width=True)
-        b50    = st.button("⚡ +50 Packets",  key="lv50",  use_container_width=True)
+        b1     = st.button("📤 +1 Packet",    key="lv1",   width="stretch")
+        b10    = st.button("📦 +10 Packets",  key="lv10",  width="stretch")
+        b50    = st.button("⚡ +50 Packets",  key="lv50",  width="stretch")
         b_run  = st.button("▶ Run to Decode", key="lv_run", type="primary",
-                           use_container_width=True)
-        b_rst  = st.button("🔄 Reset",         key="lv_rst", use_container_width=True)
+                           width="stretch")
+        b_rst  = st.button("🔄 Reset",         key="lv_rst", width="stretch")
 
     # ── Session state init ────────────────────────────────────────────────────
-    if "lv_rng" not in st.session_state or b_rst:
-        st.session_state.lv_rng       = np.random.default_rng(
-            int(np.random.default_rng().integers(0, 99999))
-        )
-        st.session_state.lv_buf       = []
-        st.session_state.lv_flags     = []
-        st.session_state.lv_rt_rx     = set()
-        st.session_state.lv_rank_hist = []
-        st.session_state.lv_rt_hist   = []
-        st.session_state.lv_n_tx      = 0
-        st.session_state.lv_rlnc_done = False
-        st.session_state.lv_rt_done   = False
+    lv_params = (k, R_rate)
+    if (
+        "lv_rng" not in st.session_state
+        or st.session_state.get("lv_params") != lv_params
+        or b_rst
+    ):
+        reset_live_decoder(lv_params)
 
     if b1:    _lv_step(1,           k, eps_lv)
     if b10:   _lv_step(10,          k, eps_lv)
@@ -1138,7 +1168,7 @@ with tabs[6]:
                 yaxis=dict(autorange="reversed"),
                 font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
             )
-            st.plotly_chart(fig_mat, use_container_width=True)
+            st.plotly_chart(fig_mat, width="stretch")
         else:
             st.info("Press **+1 Packet** or **▶ Run to Decode** to start the simulation.")
 
@@ -1191,7 +1221,7 @@ with tabs[6]:
             legend=dict(x=0.02, y=0.95),
         )
         apply_base(fig_race, height=320)
-        st.plotly_chart(fig_race, use_container_width=True)
+        st.plotly_chart(fig_race, width="stretch")
 
     st.caption(
         f"GF(2) RLNC: each received non-zero packet is innovative (rank increases) with "
@@ -1296,7 +1326,7 @@ with tabs[7]:
         font=dict(family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#1a1a2e"),
         plot_bgcolor="#fafbff", paper_bgcolor="white",
     )
-    st.plotly_chart(fig_hm, use_container_width=True)
+    st.plotly_chart(fig_hm, width="stretch")
 
     # Per-receiver decode time bar chart
     recv_ids = [f"Rx {m}" for m in range(M_recv)]
@@ -1327,7 +1357,7 @@ with tabs[7]:
         legend=dict(x=0.02, y=0.95),
     )
     apply_base(fig_bar, height=360)
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
 
     st.caption(
         "★ = RLNC decode event. ◆ = routing decode event. "
@@ -1424,7 +1454,7 @@ with tabs[8]:
                          showgrid=True, gridcolor="#e0e0e0", secondary_y=False)
     fig_fd1.update_yaxes(title_text="n* (coded packets per block)",
                          showgrid=False, secondary_y=True)
-    st.plotly_chart(fig_fd1, use_container_width=True)
+    st.plotly_chart(fig_fd1, width="stretch")
 
     # ── Plot 2: per-block throughput + cumulative throughput ──────────────────
     cum_adp = np.cumsum(ea_sel)
@@ -1496,7 +1526,7 @@ with tabs[8]:
     )
     fig_fd2.update_xaxes(title_text="Coherence Block", showgrid=True, gridcolor="#e0e0e0")
     fig_fd2.update_yaxes(showgrid=True, gridcolor="#e0e0e0")
-    st.plotly_chart(fig_fd2, use_container_width=True)
+    st.plotly_chart(fig_fd2, width="stretch")
 
     # ── Outage / efficiency summary ───────────────────────────────────────────
     out_adp = 1.0 - da_sel.mean()
